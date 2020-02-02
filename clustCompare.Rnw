@@ -92,16 +92,18 @@ sessionInfo()
 
 
 \newpage
-\section{Iris}
+\section{Iris ``Classic''}
 <<iris1>>=
-#irisRot <- lda(
-#  x = iris[,1:4,],
-#  grouping = iris$Species
-#)
-#str(irisRot)
-#rots <- as.matrix(iris[,1:4]) %*% irisRot$scaling
-#iris$ROT1 <- rots[,1]
-#iris$ROT2 <- rots[,2]
+irisOrig <- iris
+irisRot <- lda(
+  x = iris[,1:4,],
+  grouping = iris$Species
+)
+str(irisRot)
+rots <- as.matrix(iris[,1:4]) %*% irisRot$scaling
+iris$ROT1 <- rots[,1]
+iris$ROT2 <- rots[,2]
+pairs(iris, col = iris$Species)
 
 (
   ggplot(
@@ -129,10 +131,13 @@ iris$db_mp5_ep0p5 <- factor(res1$cluster + 1)
 )
 @
 
+\newpage
+\subsubsection{Magic Parameter Knowledge}
 <<id2>>=
 db_iris_parm <- expand.grid(
   eps = seq(0.4, 0.6, 0.1),
-  mp  = c(3,5,7) #4:6
+  mp  = 4:6
+#  mp  = c(3,5,7)
 )
 tic()
 db_iris_list <- lapply(
@@ -147,8 +152,8 @@ db_iris_list <- lapply(
       iris,
       data.frame(
         cluster = factor(dres$cluster + 1),
-	eps = db_iris_parm$eps[i],
-	minPts = db_iris_parm$mp[i]
+	eps = paste('epsilon =',db_iris_parm$eps[i]),
+	minPts = paste('minPts =',db_iris_parm$mp[i])
       )
     ))
   }
@@ -163,6 +168,265 @@ db_iris_df <- Reduce(f = rbind, x = db_iris_list)
   )
   + geom_point()
   + facet_grid(rows = vars(eps), cols = vars(minPts))
+)
+@
+
+\newpage
+\subsubsection{Slightly-Less-Magic Parameter Knowledge}
+<<id3>>=
+db_iris_parm <- expand.grid(
+  eps = c(0.4, 0.8, 1.0),
+  mp  = c(3,5,7)
+)
+tic()
+db_iris_list <- lapply(
+  1:nrow(db_iris_parm),
+  function(i) {
+    dres <- dbscan(
+      iris[,1:4],
+      eps = db_iris_parm$eps[i],
+      minPts = db_iris_parm$mp[i]
+    )
+    return(cbind(
+      iris,
+      data.frame(
+        cluster = factor(dres$cluster + 1),
+	eps = paste('epsilon =',db_iris_parm$eps[i]),
+	minPts = paste('minPts =',db_iris_parm$mp[i])
+      )
+    ))
+  }
+)
+toc()
+db_iris_df <- Reduce(f = rbind, x = db_iris_list)
+
+(
+  ggplot(
+    db_iris_df,
+    aes(x=Sepal.Width, y = Petal.Width, color = cluster)
+  )
+  + geom_point()
+  + facet_grid(rows = vars(eps), cols = vars(minPts))
+)
+@
+
+
+\newpage
+\subsection{K-Means: Cake or Death?}
+<<ik1>>=
+km_iris_parm <- expand.grid(
+  centers = c(2:4),
+  nstart = c(1, 5, 10),
+  iter.max = c(10, 100, 1000)
+)
+tic()
+km_iris_list <- lapply(
+  1:nrow(km_iris_parm),
+  function(i) {
+    dres <- kmeans(
+      iris[,1:4],
+      centers = km_iris_parm$centers[i],
+      nstart = km_iris_parm$nstart[i],
+      iter.max = km_iris_parm$iter.max[i]
+    )
+    # reorder clusters
+    dres$cluster <- order(order(dres$centers[,4]))[dres$cluster]
+    return(cbind(
+      iris,
+      data.frame(
+        cluster = factor(dres$cluster + 0),
+	centers = km_iris_parm$centers[i],
+	nstart = km_iris_parm$nstart[i],
+	iter.max = km_iris_parm$iter.max[i]
+      )
+    ))
+  }
+)
+toc()
+km_iris_df <- Reduce(f = rbind, x = km_iris_list)
+
+(
+  ggplot(
+    km_iris_df[km_iris_df$iter.max == 1000,],
+    aes(x=Sepal.Width, y = Petal.Width, color = cluster)
+  )
+  + geom_point()
+  + facet_grid(rows = vars(centers), cols = vars(nstart))
+)
+@
+
+
+
+\newpage
+\section{Iris Plus One: Hard Mode?}
+<<irispp1>>=
+extraPt <- data.frame(
+  Sepal.Length = 5.0,
+  Sepal.Width = 3.1,
+  Petal.Length = 2.5,
+  Petal.Width = 0.8,
+  Species = 'EXTRA'
+)
+iris <- rbind(irisOrig, extraPt)
+#irisExtra <- rbind(iris, extraPt)
+irisRot <- lda(
+  x = iris[,1:4,],
+  grouping = iris$Species
+)
+str(irisRot)
+rots <- as.matrix(iris[,1:4]) %*% irisRot$scaling
+iris$ROT1 <- rots[,1]
+iris$ROT2 <- rots[,2]
+pairs(iris, col = iris$Species)
+
+(
+  ggplot(
+    iris,
+    aes(x=Sepal.Width, y = Petal.Width, color = Species)
+  )
+  + geom_point()
+)
+@
+
+\newpage
+\subsection{DBSCAN}
+<<idpp1>>=
+# 0.4 -- 0.7 look reasonable
+kNNdistplot(iris[,1:4], k = 5)
+abline(h=.5, col = "red", lty=2)
+res1 <- dbscan(iris[,1:4], eps = .5, minPts = 5)
+iris$db_mp5_ep0p5 <- factor(res1$cluster + 1)
+(
+  ggplot(
+    iris,
+    aes(x=Sepal.Width, y = Petal.Width, color = db_mp5_ep0p5)
+  )
+  + geom_point()
+)
+@
+
+\newpage
+\subsubsection{Magic Parameter Knowledge}
+<<idpp2>>=
+db_iris_parm <- expand.grid(
+  eps = seq(0.4, 0.6, 0.1),
+  mp  = 4:6
+#  mp  = c(3,5,7)
+)
+tic()
+db_iris_list <- lapply(
+  1:nrow(db_iris_parm),
+  function(i) {
+    dres <- dbscan(
+      iris[,1:4],
+      eps = db_iris_parm$eps[i],
+      minPts = db_iris_parm$mp[i]
+    )
+    return(cbind(
+      iris,
+      data.frame(
+        cluster = factor(dres$cluster + 1),
+	eps = paste('epsilon =',db_iris_parm$eps[i]),
+	minPts = paste('minPts =',db_iris_parm$mp[i])
+      )
+    ))
+  }
+)
+toc()
+db_iris_df <- Reduce(f = rbind, x = db_iris_list)
+
+(
+  ggplot(
+    db_iris_df,
+    aes(x=Sepal.Width, y = Petal.Width, color = cluster)
+  )
+  + geom_point()
+  + facet_grid(rows = vars(eps), cols = vars(minPts))
+)
+@
+
+\newpage
+\subsubsection{Slightly-Less-Magic Parameter Knowledge}
+<<idpp3>>=
+db_iris_parm <- expand.grid(
+  eps = c(0.4, 0.8, 1.0),
+  mp  = c(3,5,7)
+)
+tic()
+db_iris_list <- lapply(
+  1:nrow(db_iris_parm),
+  function(i) {
+    dres <- dbscan(
+      iris[,1:4],
+      eps = db_iris_parm$eps[i],
+      minPts = db_iris_parm$mp[i]
+    )
+    return(cbind(
+      iris,
+      data.frame(
+        cluster = factor(dres$cluster + 1),
+	eps = paste('epsilon =',db_iris_parm$eps[i]),
+	minPts = paste('minPts =',db_iris_parm$mp[i])
+      )
+    ))
+  }
+)
+toc()
+db_iris_df <- Reduce(f = rbind, x = db_iris_list)
+
+(
+  ggplot(
+    db_iris_df,
+    aes(x=Sepal.Width, y = Petal.Width, color = cluster)
+  )
+  + geom_point()
+  + facet_grid(rows = vars(eps), cols = vars(minPts))
+)
+@
+
+
+
+\newpage
+\subsection{K-Means: Cake or Death?}
+<<ikpp1>>=
+km_iris_parm <- expand.grid(
+  centers = c(2:4),
+  nstart = c(1, 5, 10),
+  iter.max = c(10, 100, 1000)
+)
+tic()
+km_iris_list <- lapply(
+  1:nrow(km_iris_parm),
+  function(i) {
+    dres <- kmeans(
+      iris[,1:4],
+      centers = km_iris_parm$centers[i],
+      nstart = km_iris_parm$nstart[i],
+      iter.max = km_iris_parm$iter.max[i]
+    )
+    # reorder clusters
+    dres$cluster <- order(order(dres$centers[,4]))[dres$cluster]
+    return(cbind(
+      iris,
+      data.frame(
+        cluster = factor(dres$cluster + 0),
+	centers = km_iris_parm$centers[i],
+	nstart = km_iris_parm$nstart[i],
+	iter.max = km_iris_parm$iter.max[i]
+      )
+    ))
+  }
+)
+toc()
+km_iris_df <- Reduce(f = rbind, x = km_iris_list)
+
+(
+  ggplot(
+    km_iris_df[km_iris_df$iter.max == 1000,],
+    aes(x=Sepal.Width, y = Petal.Width, color = cluster)
+  )
+  + geom_point()
+  + facet_grid(rows = vars(centers), cols = vars(nstart))
 )
 @
 
